@@ -1,0 +1,171 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  username    String   @unique
+  email       String   @unique
+  displayName String
+  bio         String?
+  avatar      String?
+  socialLinks String[]
+  preferences Json?
+  createdAt   DateTime @default(now())
+  lastActive  DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  creations         Creation[]
+  comments          Comment[]
+  likes             Like[]
+  generationSessions GenerationSession[]
+
+  @@map("users")
+}
+
+model Creation {
+  id               String   @id @default(cuid())
+  authorId         String
+  title            String
+  description      String
+  originalSpec     String   @db.Text
+  parsedParameters Json
+  tags             String[]
+  isPublic         Boolean  @default(true)
+  remixedFromId    String?
+  views            Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  author       User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  remixedFrom  Creation?    @relation("CreationRemix", fields: [remixedFromId], references: [id])
+  remixes      Creation[]   @relation("CreationRemix")
+  mediaFiles   MediaFile[]
+  comments     Comment[]
+  likes        Like[]
+
+  @@map("creations")
+}
+
+model MediaFile {
+  id         String  @id @default(cuid())
+  creationId String
+  type       MediaType
+  url        String
+  format     String
+  size       Int
+  width      Int?
+  height     Int?
+  duration   Float?
+  createdAt  DateTime @default(now())
+
+  // Relations
+  creation Creation @relation(fields: [creationId], references: [id], onDelete: Cascade)
+
+  @@map("media_files")
+}
+
+model Comment {
+  id         String   @id @default(cuid())
+  creationId String
+  authorId   String
+  content    String   @db.Text
+  parentId   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  creation Creation  @relation(fields: [creationId], references: [id], onDelete: Cascade)
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent   Comment?  @relation("CommentThread", fields: [parentId], references: [id])
+  replies  Comment[] @relation("CommentThread")
+
+  @@map("comments")
+}
+
+model Like {
+  id         String   @id @default(cuid())
+  creationId String
+  userId     String
+  createdAt  DateTime @default(now())
+
+  // Relations
+  creation Creation @relation(fields: [creationId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Ensure a user can only like a creation once
+  @@unique([creationId, userId])
+  @@map("likes")
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  @@map("tags")
+}
+
+model GenerationSession {
+  id                String   @id @default(cuid())
+  userId            String
+  currentParameters Json
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  lastActivity      DateTime @default(now())
+
+  // Relations
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generationJobs    GenerationJob[]
+
+  @@map("generation_sessions")
+}
+
+model GenerationJob {
+  id                  String            @id @default(cuid())
+  sessionId           String
+  type                GenerationType
+  parameters          Json
+  status              GenerationStatus  @default(PENDING)
+  resultUrl           String?
+  errorMessage        String?
+  processingTimeMs    Int?
+  createdAt           DateTime          @default(now())
+  completedAt         DateTime?
+
+  // Relations
+  session GenerationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("generation_jobs")
+}
+
+// Enums
+enum MediaType {
+  IMAGE
+  VIDEO
+  AUDIO
+}
+
+enum GenerationType {
+  VISUAL
+  AUDIO
+  MIXED
+}
+
+enum GenerationStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
